@@ -1,0 +1,4 @@
+# Registers the package's provider explicitly for tools that build a Testbench
+# app outside the Testbench CLI (Larastan), where root package discovery is off.
+providers:
+  - TecClub\OtpKit\OtpKitServiceProvider

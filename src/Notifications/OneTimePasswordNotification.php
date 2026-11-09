@@ -14,7 +14,11 @@ class OneTimePasswordNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public readonly IssuedOtp $otp)
+    /**
+     * Not readonly: queued notifications are restored by SerializesModels from
+     * the subclass's scope, which PHP below 8.4 rejects for readonly properties.
+     */
+    public function __construct(public IssuedOtp $otp)
     {
         $this->afterCommit();
 
