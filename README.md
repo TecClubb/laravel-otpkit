@@ -10,7 +10,7 @@ A headless Laravel package that issues, delivers, verifies and expires one-time 
 ## Requirements
 
 - PHP 8.2+
-- Laravel 11, 12 or 13
+- Laravel 12 or 13
 
 ## Testing
 
