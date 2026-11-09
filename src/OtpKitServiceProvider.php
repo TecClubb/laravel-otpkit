@@ -51,7 +51,14 @@ class OtpKitServiceProvider extends PackageServiceProvider
             });
         }
 
-        // After every provider has booted, so custom generators registered by the app are known.
-        $this->app->booted(fn (Application $app) => $app->make(PolicyResolver::class)->validateConfig());
+        // After every provider has booted, so custom generators and stores registered by the app are known.
+        $this->app->booted(function (Application $app) {
+            $app->make(PolicyResolver::class)->validateConfig();
+
+            // Resolving the cache driver checks the cache store supports locks, so fail at boot.
+            if ($app['config']->get('otpkit.store') === 'cache') {
+                $app->make(StoreManager::class)->driver();
+            }
+        });
     }
 }

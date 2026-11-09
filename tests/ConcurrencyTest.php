@@ -1,30 +1,35 @@
 <?php
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Redis;
 use TecClub\OtpKit\Tests\Fixtures\User;
 
 /*
- * Two processes verify the same correct code at the same moment against a
- * database with real row locks. Exactly one may succeed. SQLite has no row
- * locks, so this runs on MySQL and PostgreSQL (CI services) only.
+ * Two processes verify the same correct code at the same moment. Exactly one
+ * may succeed. Needs real locks across processes: row locks on MySQL and
+ * PostgreSQL (SQLite has none), and Cache::lock() on Redis. CI services only.
  */
-it('lets exactly one of two parallel correct verifies succeed', function (string $connection, string $hostEnv) {
+it('lets exactly one of two parallel correct verifies succeed', function (string $store, string $hostEnv) {
     if (! function_exists('pcntl_fork') || ! function_exists('posix_kill')) {
         $this->markTestSkipped('Needs the pcntl and posix extensions.');
     }
 
     if (! getenv($hostEnv)) {
-        $this->markTestSkipped("Set {$hostEnv} to run against {$connection}.");
+        $this->markTestSkipped("Set {$hostEnv} to run against {$store}.");
     }
 
-    config()->set('database.default', $connection);
-    $this->createTables($connection);
+    if ($store === 'redis') {
+        $this->useStore('redis');
+    } else {
+        config()->set('database.default', $store);
+        $this->createTables($store);
+    }
 
     $user = User::make();
     $code = $user->otp('data-export')->generate()->code;
 
     // Children must open their own connections, never share the parent's socket.
-    DB::purge($connection);
+    $store === 'redis' ? Redis::purge('otpkit') : DB::purge($store);
 
     $results = [];
     $files = [];
@@ -64,13 +69,15 @@ it('lets exactly one of two parallel correct verifies succeed', function (string
 
     sort($results);
 
-    expect($results)->toBe(['already_used', 'verified']);
+    expect($results)->toBe(['already_used', 'verified'])
+        ->and(otpRecord($user, 'data-export')->isConsumed())->toBeTrue();
 
-    DB::purge($connection);
-    expect($user->oneTimePasswords()->whereNotNull('consumed_at')->count())->toBe(1);
-
-    $this->createTables($connection);
+    if ($store !== 'redis') {
+        DB::purge($store);
+        $this->createTables($store);
+    }
 })->with([
     'mysql' => ['mysql', 'OTPKIT_TEST_MYSQL_HOST'],
     'pgsql' => ['pgsql', 'OTPKIT_TEST_PGSQL_HOST'],
+    'redis' => ['redis', 'OTPKIT_TEST_REDIS_HOST'],
 ]);
