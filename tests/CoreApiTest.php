@@ -11,6 +11,8 @@ use TecClub\OtpKit\Tests\Fixtures\Device;
 use TecClub\OtpKit\Tests\Fixtures\User;
 
 it('sends a code to a notifiable model and verifies it', function () {
+    // Frozen so expiresAt and the expectation below read the same second.
+    $this->freezeTime();
     $user = User::make();
 
     $send = $user->otp('data-export')->send();
@@ -106,6 +108,7 @@ it('generates without sending anything', function () {
 });
 
 it('applies per-call overrides', function () {
+    $this->freezeTime();
     $user = User::make();
 
     $issued = Otp::for($user)->purpose('confirm-transfer')
