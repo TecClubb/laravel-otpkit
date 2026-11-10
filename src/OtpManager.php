@@ -29,6 +29,9 @@ use TecClub\OtpKit\Support\RequestContext;
  */
 class OtpManager
 {
+    /**
+     * @internal Resolve it from the container or use the Otp facade.
+     */
     public function __construct(
         protected readonly Container $container,
         protected readonly Repository $config,

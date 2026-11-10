@@ -32,6 +32,9 @@ class LoginService
     /** @var (Closure(Authenticatable): bool)|null */
     private ?Closure $authorizeUsing = null;
 
+    /**
+     * @internal Use the OtpLogin facade or resolve it from the container.
+     */
     public function __construct(
         private readonly Container $container,
         private readonly Repository $config,
@@ -123,6 +126,8 @@ class LoginService
     /**
      * Block logins (banned, unverified, suspended). A blocked account gets the same generic failure.
      *
+     * @internal Use OtpKit::authorizeLoginUsing().
+     *
      * @param  (Closure(Authenticatable): bool)|null  $callback
      */
     public function authorizeUsing(?Closure $callback): void
@@ -132,6 +137,8 @@ class LoginService
 
     /**
      * The configured guard to use: the given one, or the first in otpkit.login.guards.
+     *
+     * @internal
      *
      * @param  list<string>|null  $allowed  restrict to these guards (from the route definition)
      */
@@ -150,12 +157,17 @@ class LoginService
         return $guard;
     }
 
+    /**
+     * @internal
+     */
     public function tokenIssuer(): TokenIssuer
     {
         return $this->container->make(TokenIssuer::class);
     }
 
     /**
+     * @internal
+     *
      * @return array{model: class-string<Model&Authenticatable>, identifier: string}
      */
     public function guardConfig(string $guard): array
@@ -165,6 +177,8 @@ class LoginService
 
     /**
      * Fail early on a broken login config. Runs at boot when login is enabled.
+     *
+     * @internal
      *
      * @throws InvalidConfigException
      */

@@ -72,14 +72,15 @@ class OtpKit
     }
 
     /**
-     * POST {prefix}/send and POST {prefix}/verify for token login. Registers
-     * nothing while otpkit.login.enabled is false. With the default Sanctum
-     * issuer, throws now if Sanctum is missing or a guard's model lacks HasApiTokens.
+     * POST {prefix}/send and POST {prefix}/verify for token login. Call it from
+     * routes/api.php, which adds Laravel's "api/" prefix: /api/otp-login/send.
+     * Registers nothing while otpkit.login.enabled is false. With the default
+     * Sanctum issuer, throws now if Sanctum is missing or a guard's model lacks HasApiTokens.
      *
      * @param  list<string>|null  $guards  login guards these routes accept; null = all configured, the first is the default
      * @param  list<string>  $middleware
      */
-    public static function apiLoginRoutes(string $prefix = 'api/otp-login', ?array $guards = null, array $middleware = ['api']): void
+    public static function apiLoginRoutes(string $prefix = 'otp-login', ?array $guards = null, array $middleware = ['api']): void
     {
         if (! config('otpkit.login.enabled', false)) {
             return;
