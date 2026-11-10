@@ -2,13 +2,14 @@
 
 namespace TecClub\OtpKit\Tests\Fixtures;
 
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 use TecClub\OtpKit\Concerns\HasOneTimePasswords;
 
-class User extends Model
+class User extends Authenticatable
 {
-    use HasOneTimePasswords, Notifiable;
+    use HasApiTokens, HasOneTimePasswords, Notifiable;
 
     protected $guarded = [];
 

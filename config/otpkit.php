@@ -1,5 +1,6 @@
 <?php
 
+use TecClub\OtpKit\Login\SanctumTokenIssuer;
 use TecClub\OtpKit\Notifications\OneTimePasswordNotification;
 
 return [
@@ -110,6 +111,32 @@ return [
     'prune' => [
         'schedule' => true,    // auto-register otpkit:prune daily; false = schedule it yourself
         'keep_for_hours' => 24,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Login by code
+    |--------------------------------------------------------------------------
+    |
+    | Off by default. Routes are never registered automatically: call
+    | OtpKit::webLoginRoutes() / OtpKit::apiLoginRoutes(), or use the OtpLogin
+    | facade from your own code. Each guard names its model and exactly one
+    | identifier column. Codes use the "login" purpose, so purposes.login and
+    | every rate limit apply.
+    |
+    */
+
+    'login' => [
+        'enabled' => env('OTPKIT_LOGIN_ENABLED', false),
+        'guards' => [
+            'web' => [
+                'model' => 'App\Models\User',
+                'identifier' => 'email',
+            ],
+        ],
+        'redirect_to' => '/',   // after web login, when there is no intended URL
+        'token_issuer' => SanctumTokenIssuer::class,
+        'token_name' => 'otp-login', // used when the request sends no device_name
     ],
 
 ];

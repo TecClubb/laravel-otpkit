@@ -7,6 +7,10 @@ return [
     'too_many_attempts' => 'Too many attempts. Request a new code.',
     'rate_limited' => 'Too many attempts. Try again in :seconds seconds.',
 
+    'login' => [
+        'sent' => 'If an account matches, we sent a login code.',
+    ],
+
     // One message per status, used when otpkit.messages.verbose is true.
     'verbose' => [
         'invalid' => 'The code is incorrect.',
