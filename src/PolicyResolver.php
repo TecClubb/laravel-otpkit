@@ -17,6 +17,9 @@ class PolicyResolver
 {
     public const DEFAULT_PURPOSE = 'default';
 
+    /** Purposes that never need listing, even with strict_purposes on. */
+    public const BUILT_IN_PURPOSES = [self::DEFAULT_PURPOSE, 'login'];
+
     public const PURPOSE_KEYS = ['length', 'charset', 'ttl', 'max_attempts', 'bind_to', 'rate_limits', 'notification'];
 
     private const PACKAGE_DEFAULTS = [
@@ -50,7 +53,7 @@ class PolicyResolver
     {
         $purposes = $this->config->get('otpkit.purposes', []) ?? [];
 
-        if ($purpose !== self::DEFAULT_PURPOSE
+        if (! in_array($purpose, self::BUILT_IN_PURPOSES, true)
             && $this->config->get('otpkit.strict_purposes', false)
             && ! array_key_exists($purpose, $purposes)) {
             throw UnknownPurposeException::named($purpose);

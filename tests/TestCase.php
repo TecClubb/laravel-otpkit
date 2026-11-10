@@ -9,6 +9,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Schema;
+use Laravel\Sanctum\SanctumServiceProvider;
 use Livewire\LivewireServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 use Symfony\Component\Mime\Email;
@@ -44,6 +45,7 @@ class TestCase extends Orchestra
     {
         return [
             LivewireServiceProvider::class,
+            SanctumServiceProvider::class,
             OtpKitServiceProvider::class,
         ];
     }
@@ -106,6 +108,12 @@ class TestCase extends Orchestra
         $config->set('cache.default', 'array');
         $config->set('mail.default', 'array');
         $config->set('queue.default', 'sync');
+        $config->set('session.driver', 'array');
+
+        $config->set('auth.guards.web', ['driver' => 'session', 'provider' => 'users']);
+        $config->set('auth.guards.admin', ['driver' => 'session', 'provider' => 'admins']);
+        $config->set('auth.providers.users', ['driver' => 'eloquent', 'model' => Fixtures\User::class]);
+        $config->set('auth.providers.admins', ['driver' => 'eloquent', 'model' => Fixtures\Admin::class]);
 
         $config->set('database.connections.mysql', [
             'driver' => 'mysql',
@@ -144,9 +152,21 @@ class TestCase extends Orchestra
         $schema->dropIfExists('devices');
         $schema->dropIfExists(config('otpkit.database.table'));
 
+        $schema->dropIfExists('admins');
+        $schema->dropIfExists('personal_access_tokens');
+
         $schema->create('users', function (Blueprint $table) {
             $table->id();
             $table->string('email');
+            $table->rememberToken();
+            $table->timestamps();
+        });
+
+        $schema->create('admins', function (Blueprint $table) {
+            $table->id();
+            $table->string('phone');
+            $table->string('email');
+            $table->rememberToken();
             $table->timestamps();
         });
 
@@ -163,6 +183,10 @@ class TestCase extends Orchestra
 
         try {
             $migration->up();
+
+            foreach (glob(__DIR__.'/../vendor/laravel/sanctum/database/migrations/*.php') ?: [] as $sanctumMigration) {
+                (include $sanctumMigration)->up();
+            }
         } finally {
             config()->set('database.default', $previous);
         }
@@ -171,7 +195,7 @@ class TestCase extends Orchestra
     /**
      * @return Collection<int, Email>
      */
-    protected function sentMails(): Collection
+    public function sentMails(): Collection
     {
         /** @var ArrayTransport $transport */
         $transport = Mail::mailer('array')->getSymfonyTransport();
@@ -182,7 +206,7 @@ class TestCase extends Orchestra
     /**
      * Pull the code out of the default mail template.
      */
-    protected function codeFromMail(Email $mail): string
+    public function codeFromMail(Email $mail): string
     {
         preg_match('/letter-spacing: 6px; text-align: center;">([A-Z0-9]+)</', (string) $mail->getHtmlBody(), $matches);
 
