@@ -28,6 +28,14 @@ function enableLogin(): void
     ]);
 }
 
+/**
+ * Register the API routes as routes/api.php would: Laravel adds the "api" prefix.
+ */
+function apiLoginRoutesInApiFile(): void
+{
+    Route::prefix('api')->group(fn () => OtpKit::apiLoginRoutes(guards: ['sanctum']));
+}
+
 function refreshRoutes(): void
 {
     app('router')->getRoutes()->refreshNameLookups();
@@ -60,7 +68,7 @@ describe('switching on', function () {
             ->and(Route::has('otpkit.login.api.send'))->toBeFalse();
 
         OtpKit::webLoginRoutes();
-        OtpKit::apiLoginRoutes(guards: ['sanctum']);
+        apiLoginRoutesInApiFile();
         refreshRoutes();
 
         expect(route('otpkit.login.send', absolute: false))->toBe('/otp-login/send')
@@ -228,7 +236,7 @@ describe('web login', function () {
 describe('API login', function () {
     beforeEach(function () {
         enableLogin();
-        OtpKit::apiLoginRoutes(guards: ['sanctum']);
+        apiLoginRoutesInApiFile();
         Route::middleware(['api', 'auth:sanctum'])->get('/api/me', fn (Request $request) => $request->user()->email);
         refreshRoutes();
     });

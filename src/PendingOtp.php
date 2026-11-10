@@ -22,6 +22,9 @@ class PendingOtp
 
     private ?string $destinationAddress = null;
 
+    /**
+     * @internal Start one with Otp::for(), Otp::to() or $model->otp().
+     */
     public function __construct(
         private readonly OtpManager $manager,
         public readonly Subject $subject,
@@ -146,6 +149,8 @@ class PendingOtp
     }
 
     /**
+     * @internal
+     *
      * @return array<string, mixed>
      */
     public function getOverrides(): array
@@ -153,11 +158,17 @@ class PendingOtp
         return $this->overrides;
     }
 
+    /**
+     * @internal
+     */
     public function getDestinationChannel(): ?string
     {
         return $this->destinationChannel;
     }
 
+    /**
+     * @internal
+     */
     public function getDestinationAddress(): ?string
     {
         return $this->destinationAddress;

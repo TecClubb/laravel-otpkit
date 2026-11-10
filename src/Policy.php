@@ -7,6 +7,8 @@ use TecClub\OtpKit\Exceptions\InvalidConfigException;
 
 /**
  * The resolved, immutable rules for one code.
+ *
+ * @internal Configure policies in config/otpkit.php or per call on PendingOtp.
  */
 final class Policy
 {
