@@ -7,13 +7,18 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Mail\Transport\ArrayTransport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Schema;
+use Livewire\LivewireServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 use Symfony\Component\Mime\Email;
 use TecClub\OtpKit\OtpKitServiceProvider;
+use TecClub\OtpKit\Stores\StoreManager;
 
 class TestCase extends Orchestra
 {
+    public const REDIS_PREFIX = 'otpkit_test:';
+
     /**
      * Config changes applied before the app boots, for tests that call refreshApplication().
      *
@@ -38,8 +43,57 @@ class TestCase extends Orchestra
     protected function getPackageProviders($app): array
     {
         return [
+            LivewireServiceProvider::class,
             OtpKitServiceProvider::class,
         ];
+    }
+
+    /**
+     * Point the package at one of the stores the shared suites run against.
+     */
+    public function useStore(string $store): void
+    {
+        match ($store) {
+            'database' => config()->set('otpkit.store', 'database'),
+            'cache' => config()->set(['otpkit.store' => 'cache', 'otpkit.cache_store' => 'array']),
+            'redis' => $this->useRedisStore(),
+        };
+
+        app(StoreManager::class)->forgetDrivers();
+    }
+
+    /**
+     * Redis runs only when OTPKIT_TEST_REDIS_HOST is set, on its own database
+     * (OTPKIT_TEST_REDIS_DB, default 15), and refuses to clear one holding
+     * anything but this suite's keys.
+     */
+    protected function useRedisStore(): void
+    {
+        if (! getenv('OTPKIT_TEST_REDIS_HOST') || ! extension_loaded('redis')) {
+            $this->markTestSkipped('Set OTPKIT_TEST_REDIS_HOST (and install ext-redis) to run against Redis.');
+        }
+
+        config()->set([
+            'database.redis.client' => 'phpredis',
+            'database.redis.options.prefix' => self::REDIS_PREFIX,
+            'database.redis.otpkit' => [
+                'host' => getenv('OTPKIT_TEST_REDIS_HOST'),
+                'port' => getenv('OTPKIT_TEST_REDIS_PORT') ?: 6379,
+                'database' => getenv('OTPKIT_TEST_REDIS_DB') ?: 15,
+            ],
+            'cache.stores.otpkit-redis' => ['driver' => 'redis', 'connection' => 'otpkit', 'lock_connection' => 'otpkit'],
+            'otpkit.store' => 'cache',
+            'otpkit.cache_store' => 'otpkit-redis',
+        ]);
+
+        $client = Redis::connection('otpkit')->client();
+        $foreign = array_filter($client->keys('*'), fn (string $key) => ! str_starts_with($key, self::REDIS_PREFIX));
+
+        if ($foreign !== []) {
+            $this->markTestSkipped('Redis database '.(getenv('OTPKIT_TEST_REDIS_DB') ?: 15).' holds other keys; refusing to clear it.');
+        }
+
+        $client->flushDB();
     }
 
     protected function defineEnvironment($app): void

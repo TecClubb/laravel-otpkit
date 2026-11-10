@@ -106,6 +106,7 @@ class Verifier
 
         if ($result->ok()) {
             if ($consume && $verified instanceof OtpRecord) {
+                $this->limiter->resetSend($subject->key, $purpose);
                 $this->events->dispatch(new OtpVerified($subject->key, $purpose, $verified->id));
             }
 

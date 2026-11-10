@@ -12,6 +12,7 @@ use Illuminate\Notifications\Notification;
 use Illuminate\Support\Str;
 use TecClub\OtpKit\Contracts\OtpStore;
 use TecClub\OtpKit\Events\OtpGenerated;
+use TecClub\OtpKit\Events\OtpRateLimited;
 use TecClub\OtpKit\Events\OtpSent;
 use TecClub\OtpKit\Exceptions\MissingDestinationException;
 use TecClub\OtpKit\Generators\GeneratorRegistry;
@@ -20,6 +21,7 @@ use TecClub\OtpKit\Results\SendResult;
 use TecClub\OtpKit\Results\VerificationResult;
 use TecClub\OtpKit\Stores\OtpRecord;
 use TecClub\OtpKit\Stores\StoreManager;
+use TecClub\OtpKit\Support\Limiter;
 use TecClub\OtpKit\Support\RequestContext;
 
 /**
@@ -36,6 +38,7 @@ class OtpManager
         protected readonly Verifier $verifier,
         protected readonly RequestContext $request,
         protected readonly Dispatcher $events,
+        protected readonly Limiter $limiter,
     ) {}
 
     /**
@@ -74,6 +77,15 @@ class OtpManager
     {
         $policy = $this->policyFor($pending);
         $notifiable = $this->notifiableFor($pending);
+        $subjectKey = $pending->subject->key;
+        $ip = $this->request->ip();
+
+        // A rate-limited send creates no code and sends nothing.
+        if ($limited = $this->limiter->checkSend($policy, $subjectKey, $ip)) {
+            $this->events->dispatch(new OtpRateLimited($subjectKey, $policy->purpose, $limited['limit'], $ip));
+
+            return SendResult::rateLimited($limited['retryAfter']);
+        }
 
         $issued = $this->issue($pending, $policy);
 
@@ -82,7 +94,9 @@ class OtpManager
 
         $this->dispatchNotification($pending, $issued, $notifiable, $notification);
 
-        $this->events->dispatch(new OtpSent($pending->subject->key, $policy->purpose, $issued->id));
+        $this->limiter->hitSend($policy, $subjectKey, $ip);
+
+        $this->events->dispatch(new OtpSent($subjectKey, $policy->purpose, $issued->id));
 
         return SendResult::forIssued($issued);
     }

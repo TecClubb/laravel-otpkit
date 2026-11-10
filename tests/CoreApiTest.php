@@ -10,176 +10,174 @@ use TecClub\OtpKit\Facades\Otp;
 use TecClub\OtpKit\Tests\Fixtures\Device;
 use TecClub\OtpKit\Tests\Fixtures\User;
 
-it('sends a code to a notifiable model and verifies it', function () {
-    // Frozen so expiresAt and the expectation below read the same second.
-    $this->freezeTime();
-    $user = User::make();
+foreach (otpStores() as $store) {
+    describe("{$store} store", function () use ($store) {
+        beforeEach(fn () => $this->useStore($store));
 
-    $send = $user->otp('data-export')->send();
+        it('sends a code to a notifiable model and verifies it', function () {
+            // Frozen so expiresAt and the expectation below read the same second.
+            $this->freezeTime();
+            $user = User::make();
 
-    expect($send->sent())->toBeTrue()
-        ->and($send->status)->toBe(SendStatus::Sent)
-        ->and($send->expiresAt->getTimestamp())->toBe(now()->addSeconds(120)->getTimestamp())
-        ->and($this->sentMails())->toHaveCount(1);
+            $send = $user->otp('data-export')->send();
 
-    $mail = $this->sentMails()->first();
-    expect($mail->getTo()[0]->getAddress())->toBe('jane@example.com');
+            expect($send->sent())->toBeTrue()
+                ->and($send->status)->toBe(SendStatus::Sent)
+                ->and($send->expiresAt->getTimestamp())->toBe(now()->addSeconds(120)->getTimestamp())
+                ->and($this->sentMails())->toHaveCount(1);
 
-    $result = $user->otp('data-export')->verify($this->codeFromMail($mail));
+            $mail = $this->sentMails()->first();
+            expect($mail->getTo()[0]->getAddress())->toBe('jane@example.com');
 
-    expect($result->ok())->toBeTrue()
-        ->and($result->status)->toBe(OtpStatus::Verified)
-        ->and($user->otp('data-export')->pending())->toBeFalse();
-});
+            $result = $user->otp('data-export')->verify($this->codeFromMail($mail));
 
-it('uses the default purpose when none is given', function () {
-    $user = User::make();
-    $code = $user->otp()->generate()->code;
+            expect($result->ok())->toBeTrue()
+                ->and($result->status)->toBe(OtpStatus::Verified)
+                ->and($user->otp('data-export')->pending())->toBeFalse();
+        });
 
-    expect($user->otp('default')->pending())->toBeTrue()
-        ->and($user->otp()->verify($code)->ok())->toBeTrue();
-});
+        it('uses the default purpose when none is given', function () {
+            $user = User::make();
+            $code = $user->otp()->generate()->code;
 
-it('never lets a code for one purpose work for another', function () {
-    $user = User::make();
-    $code = $user->otp('data-export')->generate()->code;
+            expect($user->otp('default')->pending())->toBeTrue()
+                ->and($user->otp()->verify($code)->ok())->toBeTrue();
+        });
 
-    expect($user->otp('delete-account')->verify($code)->status)->toBe(OtpStatus::NotFound)
-        ->and($user->otp('data-export')->verify($code)->ok())->toBeTrue();
-});
+        it('never lets a code for one purpose work for another', function () {
+            $user = User::make();
+            $code = $user->otp('data-export')->generate()->code;
 
-it('never lets a code for one subject work for another', function () {
-    $jane = User::make();
-    $john = User::make('john@example.com');
-    $code = $jane->otp()->generate()->code;
+            expect($user->otp('delete-account')->verify($code)->status)->toBe(OtpStatus::NotFound)
+                ->and($user->otp('data-export')->verify($code)->ok())->toBeTrue();
+        });
 
-    expect($john->otp()->verify($code)->status)->toBe(OtpStatus::NotFound);
-});
+        it('never lets a code for one subject work for another', function () {
+            $jane = User::make();
+            $john = User::make('john@example.com');
+            $code = $jane->otp()->generate()->code;
 
-it('sends codes to an address with no model', function () {
-    $send = Otp::to('mail', 'Guest@Example.com')->purpose('guest-checkout')->send();
+            expect($john->otp()->verify($code)->status)->toBe(OtpStatus::NotFound);
+        });
 
-    expect($send->sent())->toBeTrue();
+        it('sends codes to an address with no model', function () {
+            $send = Otp::to('mail', 'Guest@Example.com')->purpose('guest-checkout')->send();
 
-    $mail = $this->sentMails()->sole();
-    $code = $this->codeFromMail($mail);
+            expect($send->sent())->toBeTrue();
 
-    expect($mail->getTo()[0]->getAddress())->toBe('Guest@Example.com')
-        // Address subjects are case-insensitive.
-        ->and(Otp::to('mail', 'guest@example.com')->purpose('guest-checkout')->verify($code)->ok())->toBeTrue();
-});
+            $mail = $this->sentMails()->sole();
+            $code = $this->codeFromMail($mail);
 
-it('delivers to another address with sendTo()', function () {
-    $user = User::make();
+            expect($mail->getTo()[0]->getAddress())->toBe('Guest@Example.com')
+                // Address subjects are case-insensitive.
+                ->and(Otp::to('mail', 'guest@example.com')->purpose('guest-checkout')->verify($code)->ok())->toBeTrue();
+        });
 
-    $user->otp('verify-email')->sendTo('mail', 'new@example.com')->send();
+        it('delivers to another address with sendTo()', function () {
+            $user = User::make();
 
-    $mail = $this->sentMails()->sole();
+            $user->otp('verify-email')->sendTo('mail', 'new@example.com')->send();
 
-    expect($mail->getTo()[0]->getAddress())->toBe('new@example.com')
-        ->and($user->otp('verify-email')->verify($this->codeFromMail($mail), destination: 'new@example.com')->ok())->toBeTrue();
-});
+            $mail = $this->sentMails()->sole();
 
-it('throws a clear error for a model without Notifiable and no destination', function () {
-    $device = Device::create(['name' => 'Phone']);
+            expect($mail->getTo()[0]->getAddress())->toBe('new@example.com')
+                ->and($user->otp('verify-email')->verify($this->codeFromMail($mail), destination: 'new@example.com')->ok())->toBeTrue();
+        });
 
-    expect(fn () => $device->otp('pair-device')->send())
-        ->toThrow(MissingDestinationException::class, 'does not use the Notifiable trait')
-        ->and($device->otp('pair-device')->pending())->toBeFalse();
+        it('throws a clear error for a model without Notifiable and no destination', function () {
+            $device = Device::create(['name' => 'Phone']);
 
-    $device->otp('pair-device')->sendTo('mail', 'owner@example.com')->send();
+            expect(fn () => $device->otp('pair-device')->send())
+                ->toThrow(MissingDestinationException::class, 'does not use the Notifiable trait')
+                ->and($device->otp('pair-device')->pending())->toBeFalse();
 
-    expect($this->sentMails())->toHaveCount(1);
-});
+            $device->otp('pair-device')->sendTo('mail', 'owner@example.com')->send();
 
-it('generates without sending anything', function () {
-    Event::fake([OtpGenerated::class, OtpSent::class]);
-    $user = User::make();
+            expect($this->sentMails())->toHaveCount(1);
+        });
 
-    $issued = $user->otp('pair-device')->generate();
+        it('generates without sending anything', function () {
+            Event::fake([OtpGenerated::class, OtpSent::class]);
+            $user = User::make();
 
-    expect($issued->purpose)->toBe('pair-device')
-        ->and($issued->code)->toMatch('/^\d{6}$/')
-        ->and($this->sentMails())->toBeEmpty()
-        ->and($user->otp('pair-device')->pending())->toBeTrue();
+            $issued = $user->otp('pair-device')->generate();
 
-    Event::assertDispatched(OtpGenerated::class, fn ($event) => $event->id === $issued->id);
-    Event::assertNotDispatched(OtpSent::class);
-});
+            expect($issued->purpose)->toBe('pair-device')
+                ->and($issued->code)->toMatch('/^\d{6}$/')
+                ->and($this->sentMails())->toBeEmpty()
+                ->and($user->otp('pair-device')->pending())->toBeTrue();
 
-it('applies per-call overrides', function () {
-    $this->freezeTime();
-    $user = User::make();
+            Event::assertDispatched(OtpGenerated::class, fn ($event) => $event->id === $issued->id);
+            Event::assertNotDispatched(OtpSent::class);
+        });
 
-    $issued = Otp::for($user)->purpose('confirm-transfer')
-        ->length(8)->alphanumeric()->ttl(300)->maxAttempts(3)
-        ->generate();
+        it('applies per-call overrides', function () {
+            $this->freezeTime();
+            $user = User::make();
 
-    expect($issued->code)->toMatch('/^[23456789A-Z]{8}$/')
-        ->and($issued->expiresAt->getTimestamp())->toBe(now()->addSeconds(300)->getTimestamp());
+            $issued = Otp::for($user)->purpose('confirm-transfer')
+                ->length(8)->alphanumeric()->ttl(300)->maxAttempts(3)
+                ->generate();
 
-    $user->otp('confirm-transfer')->verify('WRONG');
-    $user->otp('confirm-transfer')->verify('WRONG');
+            expect($issued->code)->toMatch('/^[23456789A-Z]{8}$/')
+                ->and($issued->expiresAt->getTimestamp())->toBe(now()->addSeconds(300)->getTimestamp());
 
-    expect($user->otp('confirm-transfer')->verify('WRONG')->status)->toBe(OtpStatus::TooManyAttempts);
-});
+            $user->otp('confirm-transfer')->verify('WRONG');
+            $user->otp('confirm-transfer')->verify('WRONG');
 
-it('applies purpose config over the defaults', function () {
-    config()->set('otpkit.purposes.delete-account', ['length' => 8, 'max_attempts' => 3]);
+            expect($user->otp('confirm-transfer')->verify('WRONG')->status)->toBe(OtpStatus::TooManyAttempts);
+        });
 
-    expect(User::make()->otp('delete-account')->generate()->code)->toMatch('/^\d{8}$/');
-});
+        it('applies purpose config over the defaults', function () {
+            config()->set('otpkit.purposes.delete-account', ['length' => 8, 'max_attempts' => 3]);
 
-it('reports and kills pending codes', function () {
-    $user = User::make();
+            expect(User::make()->otp('delete-account')->generate()->code)->toMatch('/^\d{8}$/');
+        });
 
-    expect($user->otp('data-export')->pending())->toBeFalse();
+        it('reports and kills pending codes', function () {
+            $user = User::make();
 
-    $code = $user->otp('data-export')->generate()->code;
-    expect($user->otp('data-export')->pending())->toBeTrue();
+            expect($user->otp('data-export')->pending())->toBeFalse();
 
-    $user->otp('data-export')->invalidate();
+            $code = $user->otp('data-export')->generate()->code;
+            expect($user->otp('data-export')->pending())->toBeTrue();
 
-    expect($user->otp('data-export')->pending())->toBeFalse()
-        ->and($user->otp('data-export')->verify($code)->status)->toBe(OtpStatus::NotFound);
-});
+            $user->otp('data-export')->invalidate();
 
-it('keeps one active code per subject and purpose', function () {
-    $user = User::make();
+            expect($user->otp('data-export')->pending())->toBeFalse()
+                ->and($user->otp('data-export')->verify($code)->status)->toBe(OtpStatus::NotFound);
+        });
 
-    $first = $user->otp()->generate();
-    $second = $user->otp()->generate();
+        it('keeps one active code per subject and purpose', function () {
+            $user = User::make();
 
-    expect(Otp::isCurrent($first->id))->toBeFalse()
-        ->and(Otp::isCurrent($second->id))->toBeTrue()
-        ->and($user->otp()->verify($first->code)->ok())->toBe($first->code === $second->code)
-        ->and($user->oneTimePasswords()->whereNull('consumed_at')->count())->toBeLessThanOrEqual(1);
-});
+            $first = $user->otp()->generate();
+            $second = $user->otp()->generate();
 
-it('checks without consuming, and verify consumes', function () {
-    $user = User::make();
-    $code = $user->otp('delete-account')->generate()->code;
+            expect(Otp::isCurrent($first->id))->toBeFalse()
+                ->and(Otp::isCurrent($second->id))->toBeTrue()
+                ->and($user->otp()->verify($first->code)->ok())->toBe($first->code === $second->code)
+                ->and(otpRecord($user)->id)->toBe($second->id);
+        });
 
-    expect($user->otp('delete-account')->check($code)->ok())->toBeTrue()
-        ->and($user->otp('delete-account')->check($code)->ok())->toBeTrue()
-        ->and($user->otp('delete-account')->pending())->toBeTrue()
-        ->and($user->otp('delete-account')->verify($code)->ok())->toBeTrue()
-        ->and($user->otp('delete-account')->check($code)->status)->toBe(OtpStatus::AlreadyUsed);
-});
+        it('checks without consuming, and verify consumes', function () {
+            $user = User::make();
+            $code = $user->otp('delete-account')->generate()->code;
 
-it('counts failed checks as attempts', function () {
-    $user = User::make();
-    $code = $user->otp()->maxAttempts(3)->generate()->code;
+            expect($user->otp('delete-account')->check($code)->ok())->toBeTrue()
+                ->and($user->otp('delete-account')->check($code)->ok())->toBeTrue()
+                ->and($user->otp('delete-account')->pending())->toBeTrue()
+                ->and($user->otp('delete-account')->verify($code)->ok())->toBeTrue()
+                ->and($user->otp('delete-account')->check($code)->status)->toBe(OtpStatus::AlreadyUsed);
+        });
 
-    expect($user->otp()->check($code === '000000' ? '111111' : '000000')->attemptsRemaining)->toBe(2)
-        ->and($user->otp()->check($code === '000000' ? '111111' : '000000')->attemptsRemaining)->toBe(1)
-        ->and($user->otp()->check($code)->ok())->toBeTrue();
-});
+        it('counts failed checks as attempts', function () {
+            $user = User::make();
+            $code = $user->otp()->maxAttempts(3)->generate()->code;
 
-it('links database codes to their model', function () {
-    $user = User::make();
-    $user->otp()->generate();
-
-    expect($user->oneTimePasswords()->count())->toBe(1)
-        ->and($user->oneTimePasswords()->first()->otpable->is($user))->toBeTrue();
-});
+            expect($user->otp()->check($code === '000000' ? '111111' : '000000')->attemptsRemaining)->toBe(2)
+                ->and($user->otp()->check($code === '000000' ? '111111' : '000000')->attemptsRemaining)->toBe(1)
+                ->and($user->otp()->check($code)->ok())->toBeTrue();
+        });
+    });
+}

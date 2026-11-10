@@ -83,3 +83,11 @@ it('fires OtpGenerated and OtpSent', function () {
         && $event->expiresAt->equalTo($send->expiresAt));
     Event::assertDispatched(OtpSent::class, fn ($event) => $event->id === $send->id);
 });
+
+it('links database codes to their model', function () {
+    $user = User::make();
+    $user->otp()->generate();
+
+    expect($user->oneTimePasswords()->count())->toBe(1)
+        ->and($user->oneTimePasswords()->first()->otpable->is($user))->toBeTrue();
+});
